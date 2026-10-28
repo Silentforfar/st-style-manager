@@ -12,7 +12,7 @@ import { saveSettingsDebounced, substituteParams } from '../../../../script.js';
 import { macros, MacroCategory } from '../../../macros/macro-system.js';
 
 const TAG = '[文风]';
-const VERSION = 'v2.3.1';
+const VERSION = 'v2.3.2';
 const JOINER = '\n\n';
 
 // ---------------- 内置示例文风（首次安装时种子） ----------------
@@ -724,7 +724,7 @@ function buildFloat() {
 	floatWin.id = 'stsw';
 	floatWin.innerHTML = `
 <div class="stsw-head">
-	<span class="stsw-title">文风管理器</span>
+	<span class="stsw-title" title="拖动可移动；双击标题栏可归位">文风管理器</span>
 	<span class="stsw-sum">未点亮</span>
 	<span class="stsw-x" title="关闭">✕</span>
 </div>
@@ -738,6 +738,12 @@ function buildFloat() {
 	floatWin.querySelector('.stsw-x').addEventListener('click', () => toggleFloat(false));
 	floatWin.querySelector('.stsw-copy').addEventListener('click', () => copyText('{{style}}'));
 	floatWin.querySelector('.stsw-new').addEventListener('click', () => openEditor(null));
+
+	// 双击标题栏 → 回到默认位置（万一还是被拖丢了，双击一下就能找回来）
+	floatWin.querySelector('.stsw-head').addEventListener('dblclick', (e) => {
+		if (e.target.closest('.stsw-x')) { return; }
+		resetFloatPos();
+	});
 
 	// 点标签切换：与设置页共用同一份数据，两边自动同步
 	floatWin.querySelector('.stsw-chips').addEventListener('click', (e) => {
@@ -822,6 +828,20 @@ function clampFloatIntoView() {
 	// 关键兜底：不管内容以后长多高，都不会溢出视口底部（chips 区自己滚）
 	floatWin.style.maxHeight = `${Math.max(120, window.innerHeight - y - 8)}px`;
 	return { x, y };
+}
+
+/** 把悬浮窗恢复到默认位置（左下角），并清掉记忆的坐标 */
+function resetFloatPos() {
+	if (!floatWin) { return; }
+	const s = store();
+	if ('floatPos' in s) { delete s.floatPos; }
+	persist();
+	floatWin.style.maxHeight = '';
+	floatWin.style.left = '16px';
+	floatWin.style.top = 'auto';
+	floatWin.style.right = 'auto';
+	floatWin.style.bottom = '96px';
+	window.toastr?.info('悬浮窗已归位');
 }
 
 function applyFloatPos() {
