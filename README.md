@@ -27,7 +27,7 @@
 3. 粘贴本仓库地址：
 
 ```
-https://github.com/ZHD/st-style-manager
+https://github.com/Silentforfar/st-style-manager
 ```
 
 4. 确认后刷新页面
@@ -38,7 +38,7 @@ https://github.com/ZHD/st-style-manager
 
 ```bash
 cd SillyTavern/public/scripts/extensions/third-party
-git clone https://github.com/ZHD/st-style-manager
+git clone https://github.com/Silentforfar/st-style-manager
 ```
 
 然后刷新酒馆页面。
