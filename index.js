@@ -12,7 +12,7 @@ import { saveSettingsDebounced, substituteParams } from '../../../../script.js';
 import { macros, MacroCategory } from '../../../macros/macro-system.js';
 
 const TAG = '[文风]';
-const VERSION = 'v2.2.0-2026-10-28';
+const VERSION = 'v2.3.1';
 const JOINER = '\n\n';
 
 // ---------------- 内置示例文风（首次安装时种子） ----------------
@@ -224,6 +224,7 @@ const CSS = `
 #stsm .stsm-acts{display:flex;gap:4px;flex:0 0 auto}
 #stsm .stsm-acts button{font-size:11.5px;padding:2px 7px}
 #stsm .stsm-use{margin-top:8px;font-size:11.5px;line-height:1.8;opacity:.65}
+#stsm .stsm-ver{margin-left:auto;font-size:11px;opacity:.7;font-family:var(--monoFontFamily,ui-monospace,Menlo,monospace)}
 /* 面板整体也设个上限，小屏/窄屏不会把设置页顶爆 */
 #stsm .stsm-main{max-height:70vh;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
 #stsm .stsm-main::-webkit-scrollbar{width:8px}
@@ -250,6 +251,7 @@ const CSS = `
  border-color:color-mix(in srgb,var(--SmartThemeQuoteColor,#2f9e62) 45%,transparent);font-weight:600}
 /* ---------- 悬浮窗（魔棒菜单打开） ---------- */
 #stsw{position:fixed;z-index:60000;display:none;flex-direction:column;width:288px;max-width:88vw;
+ max-height:86vh;overflow:hidden;
  border-radius:12px;border:1px solid color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent);
  background:var(--SmartThemeBlurTintColor,rgba(27,28,32,.96));color:var(--SmartThemeBodyColor,#e8eaf0);
  box-shadow:0 10px 30px rgba(0,0,0,.35);font-size:13px;backdrop-filter:blur(8px)}
@@ -261,7 +263,7 @@ const CSS = `
 #stsw .stsw-sum{margin-left:auto;font-size:11px;opacity:.6;white-space:nowrap}
 #stsw .stsw-x{cursor:pointer;opacity:.55;padding:0 3px;font-size:13px}
 #stsw .stsw-x:hover{opacity:1}
-#stsw .stsw-chips{display:flex;flex-wrap:wrap;gap:5px;padding:8px 10px;max-height:168px;overflow-y:auto;overscroll-behavior:contain}
+#stsw .stsw-chips{display:flex;flex-wrap:wrap;gap:5px;padding:8px 10px;max-height:168px;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 #stsw .stsw-chips::-webkit-scrollbar{width:8px}
 #stsw .stsw-chips::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent);border-radius:4px}
 #stsw .stsw-chips::-webkit-scrollbar-track{background:transparent}
@@ -317,6 +319,7 @@ function buildUI() {
 			<div class="stsm-bar" style="margin-top:6px">
 				<button class="stsm-copy-tag">复制 {{style}}</button>
 				<button class="stsm-copy-body">复制组合结果</button>
+				<span class="stsm-ver" title="当前插件版本（可用来核对更新是否生效）">${VERSION}</span>
 			</div>
 		</div>
 	</div>
@@ -761,16 +764,64 @@ function buildFloat() {
 	head.addEventListener('pointerup', () => {
 		if (!drag) { return; }
 		drag = null;
-		const r = floatWin.getBoundingClientRect();
-		const s = store();
-		s.floatPos = {
-			x: Math.max(4, Math.min(window.innerWidth - r.width - 4, r.left)),
-			y: Math.max(4, Math.min(window.innerHeight - r.height - 4, r.top)),
-		};
-		persist();
+		const p = clampFloatIntoView();
+		if (p) {
+			const s = store();
+			s.floatPos = p;
+			persist();
+		}
 	});
 
 	applyFloatPos();
+
+	// 窗口尺寸变化（换设备、缩窗口、手机转屏）→ 立刻把浮窗拉回可视区并写回
+	// 少了这一步就会重演「浮窗跑到屏幕外、再也看不见」的老毛病
+	let resizeTimer = null;
+	window.addEventListener('resize', () => {
+		clearTimeout(resizeTimer);
+		resizeTimer = setTimeout(() => {
+			const p = clampFloatIntoView();
+			if (!p) { return; }
+			const s = store();
+			if (!s.floatPos || s.floatPos.x !== p.x || s.floatPos.y !== p.y) {
+				s.floatPos = p;
+				persist();
+			}
+		}, 200);
+	});
+}
+
+// 浮窗尺寸兜底：元素隐藏时 getBoundingClientRect 全为 0，用它估边界
+const FLOAT_FALLBACK_W = 288;
+const FLOAT_FALLBACK_H = 240;
+
+function clampFloatIntoView() {
+	if (!floatWin) { return null; }
+	const shown = floatWin.classList.contains('stsw-open');
+	const r = floatWin.getBoundingClientRect();
+	const w = (shown && r.width) ? r.width : FLOAT_FALLBACK_W;
+	const h = (shown && r.height) ? r.height : FLOAT_FALLBACK_H;
+	const maxX = Math.max(4, window.innerWidth - w - 4);
+
+	// 高度会随内容/字体加载变化（实测同一帧能差 50px），所以不拿它当准绳，
+	// 而是给一个「至少留 160px 可见」的保守余量，再用 max-height 兜底。
+	const reserveH = Math.min(Math.max(h, 160), Math.max(160, window.innerHeight - 8));
+	const maxY = Math.max(4, window.innerHeight - reserveH - 4);
+
+	const x0 = parseFloat(floatWin.style.left);
+	const y0 = parseFloat(floatWin.style.top);
+	// 还没用绝对定位（默认靠 left/bottom）→ 无需钳制
+	if (!Number.isFinite(x0) || !Number.isFinite(y0)) { return null; }
+
+	const x = Math.min(Math.max(4, x0), maxX);
+	const y = Math.min(Math.max(4, y0), maxY);
+	floatWin.style.left = `${x}px`;
+	floatWin.style.top = `${y}px`;
+	floatWin.style.right = 'auto';
+	floatWin.style.bottom = 'auto';
+	// 关键兜底：不管内容以后长多高，都不会溢出视口底部（chips 区自己滚）
+	floatWin.style.maxHeight = `${Math.max(120, window.innerHeight - y - 8)}px`;
+	return { x, y };
 }
 
 function applyFloatPos() {
@@ -779,12 +830,17 @@ function applyFloatPos() {
 	floatWin.style.right = 'auto';
 	floatWin.style.bottom = 'auto';
 	if (s.floatPos && Number.isFinite(s.floatPos.x) && Number.isFinite(s.floatPos.y)) {
-		const r = floatWin.getBoundingClientRect();
-		const x = Math.max(4, Math.min(window.innerWidth - (r.width || 288) - 4, s.floatPos.x));
-		const y = Math.max(4, Math.min(window.innerHeight - (r.height || 120) - 4, s.floatPos.y));
-		floatWin.style.left = `${x}px`;
-		floatWin.style.top = `${y}px`;
+		floatWin.style.left = `${s.floatPos.x}px`;
+		floatWin.style.top = `${s.floatPos.y}px`;
+		const p = clampFloatIntoView();
+		// 存的位置在当前屏幕放不下（换设备/改分辨率）→ 把修正值写回，下次直接用对的
+		if (p && (p.x !== s.floatPos.x || p.y !== s.floatPos.y)) {
+			s.floatPos = p;
+			persist();
+		}
 	} else {
+		// 默认位置（左下角靠 bottom 定位）：清掉钳制时设的行内 max-height，回到 CSS 的 86vh
+		floatWin.style.maxHeight = '';
 		floatWin.style.left = '16px';
 		floatWin.style.bottom = '96px';
 	}
@@ -881,6 +937,25 @@ function selfCheck() {
 				closeEditor();
 			} catch (err) {
 				document.documentElement.dataset.stsmEditor = `err:${err.message}`;
+			}
+
+			// 边界钳制自检：只做纯计算，绝不碰真实浮窗、不写盘
+			// （早期版本在这里直接操作 DOM，会触发 resize 链把测试坐标写进用户设置，已废弃）
+			try {
+				const vw = window.innerWidth;
+				const vh = window.innerHeight;
+				const fw = FLOAT_FALLBACK_W;
+				const fh = 160; // 至少保留的可视高度
+				const maxX = Math.max(4, vw - fw - 4);
+				const maxY = Math.max(4, vh - Math.min(Math.max(FLOAT_FALLBACK_H, 160), Math.max(160, vh - 8)) - 4);
+				const cx = Math.min(Math.max(4, 99999), maxX);
+				const cy = Math.min(Math.max(4, 99999), maxY);
+				const fits = cx >= 4 && cy >= 4 && cx + fw <= vw && cy + fh <= vh;
+				document.documentElement.dataset.stsmClamp = fits
+					? `ok:${cx},${cy}`
+					: `fail:${cx},${cy},${cx + fw},${cy + fh}`;
+			} catch (err) {
+				document.documentElement.dataset.stsmClamp = `err:${err.message}`;
 			}
 		}
 	} catch (err) {
