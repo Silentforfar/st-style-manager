@@ -201,13 +201,13 @@ const CSS = `
  opacity:1;font-weight:600}
 .stsm-chip.stsm-lit::before{content:"✓ ";font-weight:700}
 #stsm .stsm-bar{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
-#stsm input,#stsm textarea{background:color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 8%,transparent);
+#stsm input,#stsm textarea,#stse input,#stse textarea{background:color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 8%,transparent);
  border:1px solid color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent);
  color:inherit;border-radius:6px;padding:3px 7px;font-size:12px;font-family:inherit}
-#stsm button{background:color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 10%,transparent);
+#stsm button,#stse button{background:color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 10%,transparent);
  border:1px solid color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent);color:inherit;
  border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer;white-space:nowrap}
-#stsm button:hover{background:color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent)}
+#stsm button:hover,#stse button:hover{background:color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent)}
 #stsm input.stsm-search{flex:1 1 150px;min-width:100px}
 #stsm .stsm-count{font-size:11.5px;opacity:.55;white-space:nowrap;margin-left:auto}
 #stsm .stsm-list{max-height:200px;overflow-y:auto;overscroll-behavior:contain}
@@ -232,12 +232,22 @@ const CSS = `
  background:color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 9%,transparent);padding:1px 4px;border-radius:4px}
 #stsm .stsm-empty{font-size:12px;opacity:.6;padding:8px 0;line-height:1.7}
 #stsm .inline-drawer-content{display:none}
-#stsm .stsm-editor{display:none;flex-direction:column;gap:6px}
-#stsm.stsm-editing .stsm-main{display:none}
-#stsm.stsm-editing .stsm-editor{display:flex}
-#stsm .stsm-editor textarea{min-height:170px;resize:vertical;line-height:1.55}
-#stsm .stsm-e-row{display:flex;gap:6px;align-items:center}
-#stsm .stsm-e-count{font-size:11.5px;opacity:.55;margin-left:auto}
+/* ---------- 编辑弹窗（设置页与悬浮窗共用同一个） ---------- */
+#stse{position:fixed;inset:0;z-index:60010;display:none;align-items:center;justify-content:center;
+ background:rgba(0,0,0,.42);font-size:13px;color:var(--SmartThemeBodyColor,#e8eaf0)}
+#stse.stse-open{display:flex}
+#stse .stse-card{width:540px;max-width:92vw;max-height:86vh;display:flex;flex-direction:column;gap:7px;
+ padding:13px 15px 11px;border-radius:12px;
+ border:1px solid color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent);
+ background:var(--SmartThemeBlurTintColor,rgba(27,28,32,.98));
+ box-shadow:0 16px 48px rgba(0,0,0,.45)}
+#stse .stse-title{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px}
+#stse .stse-hint{margin-left:auto;font-size:11px;opacity:.55;font-weight:400}
+#stse textarea{min-height:200px;max-height:52vh;resize:vertical;line-height:1.55;font-size:12.5px}
+#stse .stse-row{display:flex;gap:6px;align-items:center}
+#stse .stse-count{font-size:11.5px;opacity:.55;margin-left:auto}
+#stse .stse-ok{background:color-mix(in srgb,var(--SmartThemeQuoteColor,#2f9e62) 26%,transparent);
+ border-color:color-mix(in srgb,var(--SmartThemeQuoteColor,#2f9e62) 45%,transparent);font-weight:600}
 /* ---------- 悬浮窗（魔棒菜单打开） ---------- */
 #stsw{position:fixed;z-index:60000;display:none;flex-direction:column;width:288px;max-width:88vw;
  border-radius:12px;border:1px solid color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent);
@@ -310,16 +320,6 @@ function buildUI() {
 			</div>
 		</div>
 	</div>
-	<div class="stsm-editor">
-		<input class="stsm-e-name" placeholder="文风名称，例如：冷峻克制">
-		<input class="stsm-e-tags" placeholder="标签，逗号分隔（可选）">
-		<textarea class="stsm-e-content" placeholder="粘贴文风正文：语气、句式、用词偏好、节奏、禁忌、示例句式…"></textarea>
-		<div class="stsm-e-row">
-			<button class="stsm-e-save">保存</button>
-			<button class="stsm-e-cancel">取消</button>
-			<span class="stsm-e-count"></span>
-		</div>
-	</div>
 </div>`;
 	host.prepend(panel);
 
@@ -354,10 +354,6 @@ function buildUI() {
 		const item = btn.closest('.stsm-item');
 		if (item && item.dataset.id) { handleAction(btn.dataset.act, item.dataset.id); }
 	});
-
-	panel.querySelector('.stsm-e-save').addEventListener('click', saveEditor);
-	panel.querySelector('.stsm-e-cancel').addEventListener('click', closeEditor);
-	panel.querySelector('.stsm-e-content').addEventListener('input', updateEditorCount);
 
 	renderAll();
 }
@@ -396,7 +392,7 @@ function renderChips() {
 	if (floatWin) {
 		const fbox = floatWin.querySelector('.stsw-chips');
 		if (fbox) {
-			fbox.innerHTML = html || '<div class="stsw-empty">盒子里还没有文风，去设置页新建一条。</div>';
+			fbox.innerHTML = html || '<div class="stsw-empty">盒子里还没有文风，点下面的「+ 新建」加一条。</div>';
 		}
 	}
 }
@@ -477,40 +473,113 @@ function handleAction(act, id) {
 	}
 }
 
-// ---------------- 编辑器 ----------------
+// ---------------- 编辑器（独立弹窗：设置页与悬浮窗共用） ----------------
+
+let editorBox = null;
+
+function ensureEditorModal() {
+	if (editorBox && document.getElementById('stse')) { return editorBox; }
+	editorBox = document.createElement('div');
+	editorBox.id = 'stse';
+	editorBox.innerHTML = `
+<div class="stse-card">
+	<div class="stse-title"><span class="stse-heading">新建文风</span><span class="stse-hint">别人的文风整段复制进来即可</span></div>
+	<input class="stse-name" placeholder="文风名称，例如：冷峻克制">
+	<input class="stse-tags" placeholder="标签，逗号分隔（可选）">
+	<textarea class="stse-content" placeholder="粘贴文风正文：语气、句式、用词偏好、节奏、禁忌、示例句式…"></textarea>
+	<div class="stse-row">
+		<button class="stse-paste" title="从剪贴板读取文本填入正文">从剪贴板粘贴</button>
+		<span class="stse-count">0 字</span>
+		<button class="stse-cancel">取消</button>
+		<button class="stse-ok">保存</button>
+	</div>
+</div>`;
+	document.body.appendChild(editorBox);
+
+	const q = (sel) => editorBox.querySelector(sel);
+	q('.stse-ok').addEventListener('click', saveEditor);
+	q('.stse-cancel').addEventListener('click', closeEditor);
+	q('.stse-content').addEventListener('input', updateEditorCount);
+
+	// 点遮罩不关闭：避免误触丢掉刚粘贴的长文
+	editorBox.addEventListener('mousedown', (e) => {
+		if (e.target === editorBox) { e.preventDefault(); }
+	});
+
+	// Esc 关闭；名称框回车直接保存（正文框的回车要留给换行）
+	editorBox.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape') {
+			e.stopPropagation();
+			closeEditor();
+		}
+		if (e.key === 'Enter' && e.target.classList.contains('stse-name') && !e.isComposing) {
+			e.preventDefault();
+			saveEditor();
+		}
+	});
+
+	q('.stse-paste').addEventListener('click', async () => {
+		try {
+			if (!navigator.clipboard?.readText) { throw new Error('浏览器不支持读取剪贴板'); }
+			const text = await navigator.clipboard.readText();
+			if (!text || !text.trim()) {
+				window.toastr?.info('剪贴板里没有文本');
+				return;
+			}
+			const box = q('.stse-content');
+			box.value = box.value.trim() ? `${box.value}\n${text}` : text;
+			updateEditorCount();
+			box.focus();
+			window.toastr?.success(`已粘贴 ${text.length} 字`);
+		} catch (err) {
+			window.toastr?.warning('读不到剪贴板，请手动 Ctrl/Cmd+V 粘贴');
+			q('.stse-content').focus();
+			console.warn(TAG, '剪贴板读取失败', err);
+		}
+	});
+
+	return editorBox;
+}
 
 function openEditor(item) {
+	const box = ensureEditorModal();
 	editingId = item ? item.id : null;
-	panel.querySelector('.stsm-e-name').value = item ? item.name : '';
-	panel.querySelector('.stsm-e-tags').value = item ? (item.tags || '') : '';
-	panel.querySelector('.stsm-e-content').value = item ? item.content : '';
+	box.querySelector('.stse-heading').textContent = item ? '编辑文风' : '新建文风';
+	box.querySelector('.stse-name').value = item ? item.name : '';
+	box.querySelector('.stse-tags').value = item ? (item.tags || '') : '';
+	box.querySelector('.stse-content').value = item ? item.content : '';
 	updateEditorCount();
-	panel.classList.add('stsm-editing');
-	panel.querySelector('.stsm-e-name').focus();
+	box.classList.add('stse-open');
+	// 延后聚焦，等弹窗布局完成
+	setTimeout(() => box.querySelector('.stse-name').focus(), 30);
 }
 
 function closeEditor() {
-	panel.classList.remove('stsm-editing');
+	if (editorBox) { editorBox.classList.remove('stse-open'); }
 	editingId = null;
 }
 
 function updateEditorCount() {
-	panel.querySelector('.stsm-e-count').textContent = `${panel.querySelector('.stsm-e-content').value.length} 字`;
+	if (!editorBox) { return; }
+	const n = editorBox.querySelector('.stse-content').value.length;
+	editorBox.querySelector('.stse-count').textContent = `${n} 字`;
 }
 
 function saveEditor() {
-	const name = panel.querySelector('.stsm-e-name').value.trim();
-	const content = panel.querySelector('.stsm-e-content').value;
-	const tags = panel.querySelector('.stsm-e-tags').value.trim();
+	const box = editorBox;
+	if (!box) { return; }
+	const name = box.querySelector('.stse-name').value.trim();
+	const content = box.querySelector('.stse-content').value;
+	const tags = box.querySelector('.stse-tags').value.trim();
 
 	if (!name) {
 		window.toastr?.warning('请填写文风名称');
-		panel.querySelector('.stsm-e-name').focus();
+		box.querySelector('.stse-name').focus();
 		return;
 	}
 	if (!content.trim()) {
 		window.toastr?.warning('文风正文为空');
-		panel.querySelector('.stsm-e-content').focus();
+		box.querySelector('.stse-content').focus();
 		return;
 	}
 
@@ -658,12 +727,14 @@ function buildFloat() {
 </div>
 <div class="stsw-chips"></div>
 <div class="stsw-foot">
+	<button class="stsw-new" title="新建一条文风（把别人的文风整段粘进来）">+ 新建</button>
 	<button class="stsw-copy">复制 {{style}}</button>
 </div>`;
 	document.body.appendChild(floatWin);
 
 	floatWin.querySelector('.stsw-x').addEventListener('click', () => toggleFloat(false));
 	floatWin.querySelector('.stsw-copy').addEventListener('click', () => copyText('{{style}}'));
+	floatWin.querySelector('.stsw-new').addEventListener('click', () => openEditor(null));
 
 	// 点标签切换：与设置页共用同一份数据，两边自动同步
 	floatWin.querySelector('.stsw-chips').addEventListener('click', (e) => {
@@ -797,6 +868,20 @@ function selfCheck() {
 			const out = substituteParams('{{style}}');
 			if (backup === null) { delete extension_settings.styleManager; } else { extension_settings.styleManager = backup; }
 			document.documentElement.dataset.stsmTest = JSON.stringify(out);
+
+			// 编辑器自检：确认独立弹窗能打开、字段齐全（不写盘）
+			try {
+				openEditor(null);
+				const box = document.getElementById('stse');
+				const ok = !!box && box.classList.contains('stse-open')
+					&& !!box.querySelector('.stse-name')
+					&& !!box.querySelector('.stse-content')
+					&& !!box.querySelector('.stse-paste');
+				document.documentElement.dataset.stsmEditor = ok ? 'ok' : 'fail';
+				closeEditor();
+			} catch (err) {
+				document.documentElement.dataset.stsmEditor = `err:${err.message}`;
+			}
 		}
 	} catch (err) {
 		document.documentElement.dataset.stsmMacros = 'error';
