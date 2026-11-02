@@ -12,7 +12,7 @@ import { saveSettingsDebounced, substituteParams } from '../../../../script.js';
 import { macros, MacroCategory } from '../../../macros/macro-system.js';
 
 const TAG = '[文风]';
-const VERSION = 'v2.4.0';
+const VERSION = 'v2.4.1';
 const JOINER = '\n\n';
 
 // ---------------- 内置示例文风（首次安装时种子） ----------------
@@ -250,11 +250,11 @@ const CSS = `
  border-color:color-mix(in srgb,var(--SmartThemeQuoteColor,#2f9e62) 45%,transparent);font-weight:600}
 /* 宿主处于编辑态时：设置页收起主内容；悬浮窗压缩标签区并隐藏底部按钮条 */
 #stsm.stsm-editing .stsm-main{display:none}
-#stsw.stsw-editing .stsw-chips{max-height:76px;opacity:.72}
+#stsw.stsw-editing .stsw-chips{display:none}
 #stsw.stsw-editing .stsw-foot{display:none}
 /* ---------- 悬浮窗（魔棒菜单打开） ---------- */
 #stsw{position:fixed;z-index:60000;display:none;flex-direction:column;width:288px;max-width:88vw;
- max-height:86vh;overflow:hidden;
+ max-height:86vh;overflow:hidden;transition:top .18s ease,max-height .18s ease,height .18s ease;
  border-radius:12px;border:1px solid color-mix(in srgb,var(--SmartThemeBodyColor,#fff) 18%,transparent);
  background:var(--SmartThemeBlurTintColor,rgba(27,28,32,.96));color:var(--SmartThemeBodyColor,#e8eaf0);
  box-shadow:0 10px 30px rgba(0,0,0,.35);font-size:13px;backdrop-filter:blur(8px)}
@@ -548,6 +548,11 @@ function openEditor(item, preferHost) {
 	ed.querySelector('.stsm-e-name').value = item ? item.name : '';
 	ed.querySelector('.stsm-e-tags').value = item ? (item.tags || '') : '';
 	ed.querySelector('.stsm-e-content').value = item ? item.content : '';
+
+	// 顺序很重要：必须「先定住位置，再展开内容」。
+	// 反过来的话，展开瞬间高度已经变了，此刻读到的坐标是错的（实测会算到屏幕外）。
+	if (host === floatWin) { anchorFloatForExpand(); }
+
 	ed.classList.add('stsm-open');
 	host.classList.add(host === floatWin ? 'stsw-editing' : 'stsm-editing');
 
@@ -555,28 +560,61 @@ function openEditor(item, preferHost) {
 	activeHost = host;
 	updateEditorCount();
 
-	// 浮窗里展开时先挪到顶部并收紧高度，给软键盘留出空间
-	if (host === floatWin) { fitFloatToViewport(); }
-
 	setTimeout(() => {
 		try {
 			ed.querySelector('.stsm-e-name').focus({ preventScroll: true });
-			ed.scrollIntoView({ block: 'nearest' });
-			if (host === floatWin) { fitFloatToViewport(); }
+			fitFloatForExpand();
 		} catch { /* 忽略 */ }
 	}, 60);
 }
 
-/// 把悬浮窗限制在「可视视口」内：手机弹出软键盘时 innerHeight 不变、
-/// visualViewport.height 会变小，不跟着收就会被键盘遮住下半截。
-function fitFloatToViewport() {
-	if (!floatWin) { return; }
+/// 可视视口高度：visualViewport 在部分浏览器/时机下会返回 0，
+/// 直接拿来算坐标会把浮窗算到屏幕外（实测 top 变成 -325）。必须兜底。
+function vpHeight() {
 	const vv = window.visualViewport;
-	const vh = vv ? vv.height : window.innerHeight;
-	const vTop = vv ? vv.offsetTop : 0;
-	floatWin.style.top = `${Math.round(vTop + 8)}px`;
-	floatWin.style.bottom = 'auto';
-	floatWin.style.maxHeight = `${Math.max(160, Math.round(vh - 16))}px`;
+	const h = vv && Number.isFinite(vv.height) ? vv.height : 0;
+	const ih = window.innerHeight;
+	// 软键盘弹出时 visualViewport.height 变小（这是我们想要的）；
+	// 若它比 innerHeight 还大，说明该值不可信，直接用 innerHeight。
+	if (h > 120 && h <= ih + 2) { return h; }
+	return ih;
+}
+
+/// 把浮窗当前的视觉位置固化成 top/left（外观完全不变），为「向下展开」做准备
+function anchorFloatForExpand() {
+	if (!floatWin) { return; }
+	const r = floatWin.getBoundingClientRect();
+	const vh = vpHeight();
+	const needH = 300;   // 展开后需要的总高度（标题 + 编辑区；编辑时标签区会隐藏）
+	const spaceBelow = vh - r.top - 8;
+
+	floatWin.style.left = `${Math.round(r.left)}px`;
+	floatWin.style.right = 'auto';
+	floatWin.style.bottom = 'auto';   // 一律用 top 定位：bottom 在本页面里实测不按视口计算
+
+	// 下方空间够 → 位置完全不动，向下展开；
+	// 下方不够（浮窗本就贴着屏幕底）→ 只上移「刚好放得下」的距离，绝不跳到屏幕顶。
+	const top = spaceBelow >= needH ? r.top : Math.max(8, vh - needH - 8);
+	floatWin.style.top = `${Math.round(top)}px`;
+	floatWin.style.maxHeight = `${Math.round(Math.max(200, vh - top - 8))}px`;
+}
+
+/// 软键盘弹出后可视视口变矮：只在真装不下时才上移
+function fitFloatForExpand() {
+	if (!floatWin || activeHost !== floatWin) { return; }
+	const vh = vpHeight();
+	let top = parseFloat(floatWin.style.top);
+	if (!Number.isFinite(top)) {
+		top = floatWin.getBoundingClientRect().top;
+	}
+	let maxH = vh - top - 8;
+	if (maxH < 200) {
+		// 键盘把空间压得太狠：往上让一点，保证编辑区还能用
+		top = Math.max(8, vh - 260);
+		maxH = Math.max(180, vh - top - 8);
+	}
+	floatWin.style.top = `${Math.round(top)}px`;
+	floatWin.style.maxHeight = `${Math.round(maxH)}px`;
 }
 
 function closeEditor() {
@@ -807,6 +845,7 @@ function buildFloat() {
 		if (e.target.closest('.stsw-x')) { return; }
 		const r = floatWin.getBoundingClientRect();
 		drag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top };
+		floatWin.style.transition = 'none';   // 拖动期间不能有过渡，否则会有拖影
 		head.setPointerCapture(e.pointerId);
 	});
 	head.addEventListener('pointermove', (e) => {
@@ -819,6 +858,7 @@ function buildFloat() {
 	head.addEventListener('pointerup', () => {
 		if (!drag) { return; }
 		drag = null;
+		floatWin.style.transition = '';
 		const p = clampFloatIntoView();
 		if (p) {
 			const s = store();
@@ -849,7 +889,7 @@ function buildFloat() {
 	if (window.visualViewport) {
 		window.visualViewport.addEventListener('resize', () => {
 			if (activeHost === floatWin && floatWin.classList.contains('stsw-editing')) {
-				fitFloatToViewport();
+				fitFloatForExpand();
 			}
 		});
 	}
@@ -904,6 +944,9 @@ function resetFloatPos() {
 
 function applyFloatPos() {
 	if (!floatWin) { return; }
+	// 恢复位置不需要动画（否则关闭编辑时会看到浮窗慢慢滑走）
+	floatWin.style.transition = 'none';
+	requestAnimationFrame(() => { if (floatWin) { floatWin.style.transition = ''; } });
 	const s = store();
 	floatWin.style.right = 'auto';
 	floatWin.style.bottom = 'auto';
@@ -917,8 +960,9 @@ function applyFloatPos() {
 			persist();
 		}
 	} else {
-		// 默认位置（左下角靠 bottom 定位）：清掉钳制时设的行内 max-height，回到 CSS 的 86vh
+		// 默认位置（左下角靠 bottom 定位）：清掉钳制/展开时设的行内值，回到 CSS 默认
 		floatWin.style.maxHeight = '';
+		floatWin.style.top = 'auto';
 		floatWin.style.left = '16px';
 		floatWin.style.bottom = '96px';
 	}
