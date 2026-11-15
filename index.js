@@ -12,7 +12,7 @@ import { saveSettingsDebounced, substituteParams } from '../../../../script.js';
 import { macros, MacroCategory } from '../../../macros/macro-system.js';
 
 const TAG = '[文风]';
-const VERSION = 'v2.4.1';
+const VERSION = 'v2.4.2';
 const JOINER = '\n\n';
 
 // ---------------- 内置示例文风（首次安装时种子） ----------------
@@ -181,8 +181,11 @@ let query = '';
 
 const CSS = `
 #stsm{color:inherit;margin-bottom:10px;position:relative}
+#stsm.inline-drawer > .inline-drawer-toggle.inline-drawer-header{margin-bottom:0}
+#stsm > .inline-drawer-content{padding-top:5px}
 #stsm .stsm-head{display:flex;align-items:center;gap:8px;width:100%}
-#stsm .stsm-summary{margin-left:auto;font-size:11.5px;opacity:.6;font-weight:400;
+#stsm .stsm-head b{font-size:inherit;font-weight:700}
+#stsm .stsm-summary{margin-left:auto;font-size:11.5px;opacity:.55;font-weight:400;
  max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #stsm .stsm-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px;
  max-height:104px;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
